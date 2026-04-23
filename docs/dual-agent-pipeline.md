@@ -48,11 +48,22 @@
 
 ---
 
-## Stage 1 — T2I Agent（Mock 阶段）
+## Stage 1 — T2I Agent
 
-- 模拟 2000ms 生图延迟
-- 返回 `gen-images/` 中第一个图片文件名作为"生成结果"
-- 未来替换为真实 T2I API：调用后将图片保存到 `gen-images/<uuid>.jpg`，返回文件名
+`lib/agent-t2i.js` 根据 `REPLICATE_API_TOKEN` 环境变量**自动切换**两种模式：
+
+| 模式 | 触发条件 | 行为 |
+| ------ | ------ | ------ |
+| **REAL** | `.env` 中 `REPLICATE_API_TOKEN` 已填写 | 调用 Replicate `flux-schnell`，下载图片保存为 `gen-images/generated-<timestamp>.jpg` |
+| **MOCK** | `REPLICATE_API_TOKEN` 为空 | 模拟 2s 延迟，返回 `gen-images/` 中第一个已有文件，打印警告 |
+
+**Replicate 调用参数**
+```js
+model: 'black-forest-labs/flux-schnell'
+input: { go_fast: true, num_outputs: 1, aspect_ratio: '1:1', output_format: 'jpeg', num_inference_steps: 4 }
+```
+
+图片下载后通过 `https.get` 直接流式写入 `gen-images/`，文件名格式 `generated-<timestamp>.jpg`。
 
 ---
 
@@ -124,6 +135,5 @@
 
 | 变量 | 用途 |
 | ------ | ------ |
-| `DEEPSEEK_API_KEY` | 意图分类和 Asset Agent 共用，在 `.env` 中配置 |
-
-T2I Agent（Mock 阶段）不需要 API Key。
+| `DEEPSEEK_API_KEY` | 意图分类（Stage 0）和 Asset Agent（Stage 2）共用，在 `.env` 中配置 |
+| `REPLICATE_API_TOKEN` | T2I Agent（Stage 1）真实生图，留空则自动降级为 Mock 模式 |
