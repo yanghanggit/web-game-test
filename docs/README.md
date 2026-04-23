@@ -7,3 +7,4 @@
 | 文件 | 内容 |
 | ------ | ------ |
 | [iframe-game-shell.md](iframe-game-shell.md) | 壳页面架构、重新开始按钮实现、游戏通信方案 |
+| [cocos-asset-tracing.md](cocos-asset-tracing.md) | Cocos 构建产物资源追查三步法（config → pack → native） |
