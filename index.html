@@ -139,17 +139,17 @@
       if (!instruction) return;
 
       btnAgent.disabled = true;
-      agentStatus.innerHTML = '🎨 生图中...';
+      agentStatus.innerHTML = '🤔 理解意图...';
 
       // Animate the status through stages while waiting for the response
       let stage = 0;
-      const stageLabels = ['🎨 生图中...', '🔍 定位游戏资源...'];
+      const stageLabels = ['🤔 理解意图...', '🎨 生图中...', '🔍 定位游戏资源...'];
       const stageTimer = setInterval(() => {
         stage++;
         if (stage < stageLabels.length) {
           agentStatus.innerHTML = stageLabels[stage];
         }
-      }, 2200); // T2I mock takes ~2 s, then asset search
+      }, 2200); // classify ~1s, T2I mock ~2s, then asset search
 
       try {
         const res = await fetch('/api/pipeline', {
@@ -163,6 +163,9 @@
 
         if (data.error) {
           agentStatus.innerHTML = '❌ 错误: ' + data.error;
+        } else if (data.earlyExit) {
+          // LLM determined no image-swap intent — show guidance, don't reload
+          agentStatus.innerHTML = '💬 ' + data.reply;
         } else if (data.swappedPath) {
           agentStatus.innerHTML = '✅ 替换完成：' + data.swappedPath;
           setTimeout(() => {
