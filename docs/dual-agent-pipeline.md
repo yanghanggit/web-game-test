@@ -1,0 +1,129 @@
+# 双 Agent Pipeline 架构
+
+## 概述
+
+用户输入一句自然语言（如"把新闻图片换成猫咪"），服务器端串联三个阶段自动完成游戏图片替换，无需用户指定资源路径。
+
+```text
+用户 prompt
+   │
+   ▼
+[Stage 0] 意图分类（LLM，~1s）
+   │ NO → 立即返回引导语，中断
+   │ YES ↓
+[Stage 1] T2I Agent（Mock 2s 延迟 / 未来接真实 T2I API）
+   │ → 产出：gen-images/<filename>.jpg
+   │
+   ▼
+[Stage 2] Asset Agent（DeepSeek Function Calling）
+   ├─ list_all_image_assets() → 枚举游戏内所有图片
+   ├─ LLM 根据 prompt 选目标资源
+   └─ swap_image(src, dest)   → 覆写 native/ 文件
+   │
+   ▼
+前端收到 swappedPath → 刷新 iframe（带时间戳）
+```
+
+---
+
+## 文件结构
+
+| 文件 | 职责 |
+| ------ | ------ |
+| `lib/pipeline.js` | 串联三个阶段，导出 `runPipeline(prompt, apiKey)` |
+| `lib/agent-t2i.js` | Stage 1：T2I Agent（当前为 Mock，返回 gen-images/ 第一个文件） |
+| `lib/agent-asset.js` | Stage 2：Asset Agent，含 `listAllImageAssets` 和 `swapImage` 工具 |
+| `server.js` | `POST /api/pipeline` 端点，读取 `DEEPSEEK_API_KEY` 环境变量 |
+| `gen-images/` | T2I 输出与 Asset Agent 输入的交接目录（已加入 .gitignore） |
+
+---
+
+## Stage 0 — 意图分类
+
+**目的**：过滤无关输入，避免白白消耗 T2I 延迟和 Asset Agent API 调用。
+
+**实现**：向 DeepSeek 发一条极短请求（无 tools，`max_tokens: 60`），prompt 要求只回复 `YES` 或 `NO|引导语`。
+
+**容错**：若 LLM 调用失败（网络错误/解析错误），**放行**，不阻断正常流程。
+
+---
+
+## Stage 1 — T2I Agent（Mock 阶段）
+
+- 模拟 2000ms 生图延迟
+- 返回 `gen-images/` 中第一个图片文件名作为"生成结果"
+- 未来替换为真实 T2I API：调用后将图片保存到 `gen-images/<uuid>.jpg`，返回文件名
+
+---
+
+## Stage 2 — Asset Agent
+
+### 工具定义
+
+| 工具 | 行为 |
+| ------ | ------ |
+| `list_all_image_assets()` | 遍历 `web-mobile/assets/*/native/`，返回 `[{ name, file }]` |
+| `swap_image(src_filename, dest_path)` | 将 `gen-images/<src>` 复制到 `dest_path`，有路径安全校验 |
+
+### LLM 决策流程
+
+1. 系统 prompt 告知 LLM：已生成文件为 `<filename>`，任务是找到正确目标资源并替换
+2. LLM 必须先调用 `list_all_image_assets()` 获取资源列表
+3. 根据用户意图从列表中选出目标，调用 `swap_image()`
+4. 返回确认文案，Agent 循环结束
+
+### 路径安全
+
+`swap_image` 校验 `dest_path` 必须在 `web-mobile/assets/` 内，防止路径穿越。
+
+---
+
+## API 接口
+
+### `POST /api/pipeline`
+
+**Request**
+
+```json
+{ "instruction": "把新闻图片换成猫咪" }
+```
+
+**Response（成功）**
+
+```json
+{
+  "stages": [
+    { "stage": "classify", "message": "🤔 理解意图..." },
+    { "stage": "t2i",      "message": "🎨 生图中..." },
+    { "stage": "asset",    "message": "🔍 定位游戏资源..." },
+    { "stage": "done",     "message": "✅ 替换完成：web-mobile/assets/..." }
+  ],
+  "reply": "已将 fake-news 图片替换为生成图片。",
+  "swappedPath": "web-mobile/assets/main/native/b2/b2c044af-....jpg",
+  "earlyExit": false
+}
+```
+
+**Response（意图不符）**
+
+```json
+{
+  "stages": [
+    { "stage": "classify", "message": "🤔 理解意图..." },
+    { "stage": "abort",    "message": "请告诉我你想把游戏中的哪张图片换成什么内容..." }
+  ],
+  "reply": "请告诉我你想把游戏中的哪张图片换成什么内容...",
+  "swappedPath": null,
+  "earlyExit": true
+}
+```
+
+---
+
+## 环境变量
+
+| 变量 | 用途 |
+| ------ | ------ |
+| `DEEPSEEK_API_KEY` | 意图分类和 Asset Agent 共用，在 `.env` 中配置 |
+
+T2I Agent（Mock 阶段）不需要 API Key。
