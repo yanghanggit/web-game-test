@@ -80,8 +80,11 @@
       gameFrame.contentWindow.postMessage({ action, data }, '*');
     }
 
-    document.getElementById('btn-restart').addEventListener('click', () => {
-      // 加时间戳强制绕过浏览器缓存，确保加载最新资源
+    document.getElementById('btn-restart').addEventListener('click', async () => {
+      // 1. 先将 gen-images/ 下的文件替换到游戏资源目录
+      const result = await fetch('/api/swap-images', { method: 'POST' }).then(r => r.json());
+      console.log('[swap]', result);
+      // 2. 加时间戳强制绕过浏览器缓存，确保加载最新资源
       gameFrame.src = '/game/index.html?t=' + Date.now();
     });
 
