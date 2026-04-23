@@ -130,39 +130,54 @@
       sendToGame('custom', {});
     });
 
-    // AI Agent
+    // AI Pipeline
     const agentStatus = document.getElementById('agent-status');
-    document.getElementById('btn-agent').addEventListener('click', async () => {
+    const btnAgent = document.getElementById('btn-agent');
+
+    btnAgent.addEventListener('click', async () => {
       const instruction = document.getElementById('agent-input').value.trim();
       if (!instruction) return;
 
-      agentStatus.textContent = '执行中...';
-      document.getElementById('btn-agent').disabled = true;
+      btnAgent.disabled = true;
+      agentStatus.innerHTML = '🎨 生图中...';
+
+      // Animate the status through stages while waiting for the response
+      let stage = 0;
+      const stageLabels = ['🎨 生图中...', '🔍 定位游戏资源...'];
+      const stageTimer = setInterval(() => {
+        stage++;
+        if (stage < stageLabels.length) {
+          agentStatus.innerHTML = stageLabels[stage];
+        }
+      }, 2200); // T2I mock takes ~2 s, then asset search
 
       try {
-        const res = await fetch('/api/agent', {
+        const res = await fetch('/api/pipeline', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ instruction }),
         });
+        clearInterval(stageTimer);
+
         const data = await res.json();
 
         if (data.error) {
-          agentStatus.textContent = '错误: ' + data.error;
+          agentStatus.innerHTML = '❌ 错误: ' + data.error;
+        } else if (data.swappedPath) {
+          agentStatus.innerHTML = '✅ 替换完成：' + data.swappedPath;
+          setTimeout(() => {
+            gameFrame.src = '/game/index.html?t=' + Date.now();
+          }, 800);
         } else {
-          agentStatus.textContent = data.reply;
-          // If agent swapped any image, reload the game automatically
-          const didSwap = data.steps?.some(s => s.tool === 'swap_image' && s.result?.success);
-          if (didSwap) {
-            setTimeout(() => {
-              gameFrame.src = '/game/index.html?t=' + Date.now();
-            }, 800);
-          }
+          // Show last stage message or LLM reply
+          const lastStage = data.stages?.[data.stages.length - 1];
+          agentStatus.innerHTML = (lastStage?.message) || data.reply || '⚠️ 未执行替换';
         }
       } catch (e) {
-        agentStatus.textContent = '网络错误: ' + e.message;
+        clearInterval(stageTimer);
+        agentStatus.innerHTML = '🌐 网络错误: ' + e.message;
       } finally {
-        document.getElementById('btn-agent').disabled = false;
+        btnAgent.disabled = false;
       }
     });
   </script>

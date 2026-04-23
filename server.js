@@ -92,6 +92,33 @@ app.post('/api/agent', express.json(), async (req, res) => {
   }
 });
 
+// POST /api/pipeline  { "instruction": "..." }
+// Dual-agent pipeline: T2I mock → Asset discovery + LLM swap
+app.post('/api/pipeline', express.json(), async (req, res) => {
+  const { instruction } = req.body || {};
+  if (!instruction) return res.status(400).json({ error: 'instruction required' });
+
+  const key = process.env.DEEPSEEK_API_KEY;
+  if (!key) return res.status(400).json({ error: 'DEEPSEEK_API_KEY not set in .env' });
+
+  console.log(`[pipeline] instruction: "${instruction}"`);
+
+  const { runPipeline } = require('./lib/pipeline');
+
+  try {
+    const result = await runPipeline(instruction, key, {
+      onProgress: ({ stage, message }) => {
+        console.log(`[pipeline:${stage}] ${message}`);
+      },
+    });
+    console.log(`[pipeline] swapped: ${result.swappedPath}`);
+    res.json(result);
+  } catch (err) {
+    console.error('[pipeline] error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log('\n=== Cocos Game Server ===\n');
   console.log(`  Local:   http://localhost:${PORT}`);
