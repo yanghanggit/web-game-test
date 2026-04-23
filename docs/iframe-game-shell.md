@@ -54,7 +54,7 @@ document.getElementById('btn-restart').addEventListener('click', () => {
 | `swappedPath` 有值 | 展示替换路径，800ms 后刷新 iframe（带时间戳） |
 | `error` | 展示红色错误信息 |
 
-前端阶段动画通过 `setInterval` 驱动，约每 2.2s 切换一个阶段标签（`🤔 理解意图... → 🎨 生图中... → 🔍 定位游戏资源...`），不依赖服务端推送。
+前端阶段动画通过 `setInterval` 驱动，约每 2.2s 切换一个阶段标签（`🤔 理解意图... → ✏️ 优化提示词... → 🎨 生图中... → 🔍 定位游戏资源...`），不依赖服务端推送。
 
 ---
 

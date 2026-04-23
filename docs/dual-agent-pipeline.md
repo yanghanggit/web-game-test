@@ -8,16 +8,20 @@
 用户 prompt
    │
    ▼
-[Stage 0] 意图分类（LLM，~1s）
+[Stage 0]   意图分类（LLM，~1s）
    │ NO → 立即返回引导语，中断
    │ YES ↓
-[Stage 1] T2I Agent（Mock 2s 延迟 / 未来接真实 T2I API）
-   │ → 产出：gen-images/<filename>.jpg
+[Stage 0.5] 提示词优化（LLM，~1s）
+   │ → 将中文自然语言改写为高质量英文 T2I 提示词
+   │ 失败时 fail-open，继续使用原始 prompt
+   ↓
+[Stage 1]   T2I Agent（Replicate flux-schnell / Mock 降级）
+   │ → 产出：gen-images/generated-<timestamp>.jpg
    │
    ▼
-[Stage 2] Asset Agent（DeepSeek Function Calling）
+[Stage 2]   Asset Agent（DeepSeek Function Calling）
    ├─ list_all_image_assets() → 枚举游戏内所有图片
-   ├─ LLM 根据 prompt 选目标资源
+   ├─ LLM 根据原始用户 prompt 选目标资源
    └─ swap_image(src, dest)   → 覆写 native/ 文件
    │
    ▼
@@ -31,7 +35,7 @@
 | 文件 | 职责 |
 | ------ | ------ |
 | `lib/pipeline.js` | 串联三个阶段，导出 `runPipeline(prompt, apiKey)` |
-| `lib/agent-t2i.js` | Stage 1：T2I Agent（当前为 Mock，返回 gen-images/ 第一个文件） |
+| `lib/agent-t2i.js` | Stage 1：T2I Agent（接收**优化后英文提示词**，REAL / MOCK 双模式） |
 | `lib/agent-asset.js` | Stage 2：Asset Agent，含 `listAllImageAssets` 和 `swapImage` 工具 |
 | `server.js` | `POST /api/pipeline` 端点，读取 `DEEPSEEK_API_KEY` 环境变量 |
 | `gen-images/` | T2I 输出与 Asset Agent 输入的交接目录（已加入 .gitignore） |
@@ -48,6 +52,18 @@
 
 ---
 
+## Stage 0.5 — 提示词优化
+
+**目的**：用户输入通常是简短中文，直接传给 Replicate 生成质量较低。此阶段调用 DeepSeek 将意图改写为 40–80 词的专业英文 T2I 提示词，提升生图质量。
+
+**实现**：向 DeepSeek 发一条 `max_tokens: 150` 的请求，System prompt 要求只输出提示词本身（无引号、无解释），风格包含 `photorealistic, high detail, vivid colors, sharp focus` 等修饰词。
+
+**容错**：调用失败（网络错误/解析错误/返回空）时 **fail-open**，继续使用原始用户 prompt，打印警告日志。
+
+> **注意**：Stage 2（Asset Agent）传入的仍是原始用户中文 prompt，以确保资源匹配基于用户真实意图，不受翻译影响。
+
+---
+
 ## Stage 1 — T2I Agent
 
 `lib/agent-t2i.js` 根据 `REPLICATE_API_TOKEN` 环境变量**自动切换**两种模式：
@@ -60,7 +76,8 @@
 **Replicate 调用参数**
 ```js
 model: 'black-forest-labs/flux-schnell'
-input: { go_fast: true, num_outputs: 1, aspect_ratio: '1:1', output_format: 'jpeg', num_inference_steps: 4 }
+input: { go_fast: true, num_outputs: 1, aspect_ratio: '1:1', output_format: 'jpg', output_quality: 85, num_inference_steps: 4 }
+// 接收的 prompt 为 Stage 0.5 优化后的英文提示词
 ```
 
 图片下载后通过 `https.get` 直接流式写入 `gen-images/`，文件名格式 `generated-<timestamp>.jpg`。
@@ -105,6 +122,7 @@ input: { go_fast: true, num_outputs: 1, aspect_ratio: '1:1', output_format: 'jpe
 {
   "stages": [
     { "stage": "classify", "message": "🤔 理解意图..." },
+    { "stage": "refine",   "message": "✏️ 优化生图提示词..." },
     { "stage": "t2i",      "message": "🎨 生图中..." },
     { "stage": "asset",    "message": "🔍 定位游戏资源..." },
     { "stage": "done",     "message": "✅ 替换完成：web-mobile/assets/..." }

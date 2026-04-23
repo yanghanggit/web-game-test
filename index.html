@@ -143,13 +143,13 @@
 
       // Animate the status through stages while waiting for the response
       let stage = 0;
-      const stageLabels = ['🤔 理解意图...', '🎨 生图中...', '🔍 定位游戏资源...'];
+      const stageLabels = ['🤔 理解意图...', '✏️ 优化提示词...', '🎨 生图中...', '🔍 定位游戏资源...'];
       const stageTimer = setInterval(() => {
         stage++;
         if (stage < stageLabels.length) {
           agentStatus.innerHTML = stageLabels[stage];
         }
-      }, 2200); // classify ~1s, T2I mock ~2s, then asset search
+      }, 2200); // classify ~1s, refine ~1s, T2I ~2s, then asset search
 
       try {
         const res = await fetch('/api/pipeline', {
