@@ -90,15 +90,21 @@ input: { go_fast: true, num_outputs: 1, aspect_ratio: '1:1', output_format: 'jpg
 
 | 工具 | 行为 |
 | ------ | ------ |
-| `list_all_image_assets()` | 遍历 `web-mobile/assets/*/native/`，返回 `[{ name, file }]` |
+| `list_all_image_assets()` | 从 Cocos 构建结构（config → pack → UUID → native）完整枚举所有图片资产，返回 `[{ name, file }]` |
 | `swap_image(src_filename, dest_path)` | 将 `gen-images/<src>` 复制到 `dest_path`，有路径安全校验 |
 
 ### LLM 决策流程
 
 1. 系统 prompt 告知 LLM：已生成文件为 `<filename>`，任务是找到正确目标资源并替换
-2. LLM 必须先调用 `list_all_image_assets()` 获取资源列表
-3. 根据用户意图从列表中选出目标，调用 `swap_image()`
+2. LLM **必须先调用 `list_all_image_assets()`**，通过结构追查从零发现完整资产目录
+3. 根据用户意图，从返回的目录中选出目标，调用 `swap_image()`
 4. 返回确认文案，Agent 循环结束
+
+### 禁止走捷径
+
+Agent **不允许**跳过 `list_all_image_assets()` 直接构造路径，也不允许凭借已知节点名（如 `fake-news`）直接定位资源。结构追查是唯一合法的发现路径——这样 Agent 才能成为**适用于任意 Cocos 项目的通用解**，而不依赖对当前游戏资产的先验记忆。
+
+多次工具调用是正常且鼓励的行为：先枚举，再推理，再替换。
 
 ### 路径安全
 
