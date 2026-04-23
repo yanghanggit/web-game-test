@@ -11,8 +11,13 @@ express.static.mime.define({
   'application/octet-stream': ['bin'],
 });
 
-// Serve web-mobile/ as the web root
-app.use(express.static(path.join(__dirname, 'web-mobile')));
+// Serve page-a.html at root
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Serve web-mobile/ under /game/ sub-path (game internal relative paths resolve correctly)
+app.use('/game', express.static(path.join(__dirname, 'web-mobile')));
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log('\n=== Cocos Game Server ===\n');
