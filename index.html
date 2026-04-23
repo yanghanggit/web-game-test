@@ -36,13 +36,44 @@
 
     #bottom-bar {
       flex-shrink: 0;
-      height: 60px;
       background: #1a1a2e;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 8px 16px;
+    }
+
+    #btn-row {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 16px;
-      padding: 0 16px;
+    }
+
+    #agent-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #agent-input {
+      flex: 1;
+      padding: 6px 10px;
+      border: 1px solid #e94560;
+      border-radius: 6px;
+      background: #0f0f1a;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+
+    #agent-input::placeholder { color: #555; }
+
+    #agent-status {
+      font-size: 12px;
+      color: #aaa;
+      min-height: 16px;
+      text-align: center;
     }
 
     .btn {
@@ -67,8 +98,15 @@
     <iframe id="gameFrame" src="/game/index.html" allowfullscreen></iframe>
 
     <div id="bottom-bar">
-      <button class="btn" id="btn-restart">重新开始</button>
-      <button class="btn" id="btn-custom" style="background:#16213e; border:1px solid #e94560;">自定义按钮</button>
+      <div id="btn-row">
+        <button class="btn" id="btn-restart">重新开始</button>
+        <button class="btn" id="btn-custom" style="background:#16213e; border:1px solid #e94560;">自定义按钮</button>
+      </div>
+      <div id="agent-row">
+        <input id="agent-input" type="text" placeholder='例：把新闻图片换成 gen-images 里的图片' />
+        <button class="btn" id="btn-agent" style="white-space:nowrap;">AI 执行</button>
+      </div>
+      <div id="agent-status"></div>
     </div>
   </div>
 
@@ -90,6 +128,42 @@
 
     document.getElementById('btn-custom').addEventListener('click', () => {
       sendToGame('custom', {});
+    });
+
+    // AI Agent
+    const agentStatus = document.getElementById('agent-status');
+    document.getElementById('btn-agent').addEventListener('click', async () => {
+      const instruction = document.getElementById('agent-input').value.trim();
+      if (!instruction) return;
+
+      agentStatus.textContent = '执行中...';
+      document.getElementById('btn-agent').disabled = true;
+
+      try {
+        const res = await fetch('/api/agent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instruction }),
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          agentStatus.textContent = '错误: ' + data.error;
+        } else {
+          agentStatus.textContent = data.reply;
+          // If agent swapped any image, reload the game automatically
+          const didSwap = data.steps?.some(s => s.tool === 'swap_image' && s.result?.success);
+          if (didSwap) {
+            setTimeout(() => {
+              gameFrame.src = '/game/index.html?t=' + Date.now();
+            }, 800);
+          }
+        }
+      } catch (e) {
+        agentStatus.textContent = '网络错误: ' + e.message;
+      } finally {
+        document.getElementById('btn-agent').disabled = false;
+      }
     });
   </script>
 </body>

@@ -1,7 +1,9 @@
+require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const { runAgent } = require('./lib/agent');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -64,6 +66,30 @@ app.post('/api/swap-images', (req, res) => {
 
   res.json({ swapped, notFound });
   console.log(`[swap-images] swapped: ${JSON.stringify(swapped)}, notFound: ${JSON.stringify(notFound)}`);
+});
+
+// POST /api/agent  { "instruction": "...", "apiKey": "..." }
+app.post('/api/agent', express.json(), async (req, res) => {
+  const { instruction, apiKey } = req.body || {};
+  if (!instruction) return res.status(400).json({ error: 'instruction required' });
+
+  const key = apiKey || process.env.DEEPSEEK_API_KEY;
+  if (!key) return res.status(400).json({ error: 'apiKey required (or set DEEPSEEK_API_KEY env var)' });
+
+  console.log(`[agent] instruction: "${instruction}"`);
+
+  try {
+    const { reply, steps } = await runAgent(instruction, key, {
+      onStep: (step) => {
+        console.log(`[agent] tool=${step.tool} result=${JSON.stringify(step.result)}`);
+      },
+    });
+    console.log(`[agent] reply: "${reply}"`);
+    res.json({ reply, steps });
+  } catch (err) {
+    console.error('[agent] error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.listen(PORT, '0.0.0.0', () => {

@@ -4,3 +4,6 @@ npm-debug.log*
 
 # Generated images staging area (local only, not committed)
 gen-images/
+
+# Local environment variables (contains API keys)
+.env
